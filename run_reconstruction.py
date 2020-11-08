@@ -11,6 +11,33 @@ from image_reconstructor import ImageReconstructor
 from options.inference_options import set_inference_options
 
 
+import sys
+sys.path.insert(0,'prophesee-automotive-dataset-toolbox')
+from src.io.psee_loader import PSEELoader
+def load_n_events(self, ev_count):
+  """
+  load batch of n events
+  :param ev_count: number of events that will be loaded
+  :return: events
+  Note that current time will be incremented to reach the timestamp of the first event not loaded yet
+  """
+  event_buffer = np.empty((ev_count + 1,), dtype=self._decode_dtype)
+
+  pos = self._file.tell()
+  count = (self._end - pos) // self._ev_size
+  if ev_count >= count:
+      self.done = True
+      ev_count = count
+      self._binary_format.stream_td_data(self._file, event_buffer, self._dtype, ev_count)
+      self.current_time = event_buffer['t'][ev_count - 1] + 1
+  else:
+      self._binary_format.stream_td_data(self._file, event_buffer, self._dtype, ev_count + 1)
+      self.current_time = event_buffer['t'][ev_count]
+      self._file.seek(pos + ev_count * self._ev_size)
+
+  return event_buffer[:ev_count]
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
@@ -30,19 +57,39 @@ if __name__ == "__main__":
     parser.add_argument('--skipevents', default=0, type=int)
     parser.add_argument('--suboffset', default=0, type=int)
     parser.add_argument('--compute_voxel_grid_on_cpu', dest='compute_voxel_grid_on_cpu', action='store_true')
-    parser.set_defaults(compute_voxel_grid_on_cpu=False)
+    parser.set_defaults(compute_voxel_grid_on_cpu=False)#set to false
 
     set_inference_options(parser)
 
     args = parser.parse_args()
-
     # Read sensor size from the first first line of the event file
     path_to_events = args.input_file
+    video = PSEELoader(path_to_events)
+    events = video.load_n_events(video.event_count())
+    header= pd.DataFrame(data=events)
+    header=header.astype({'t':np.float64,'x':np.int16,'y':np.int16,'p':np.int16})
+    header=header.rename(columns=({'p':'pol'}))
+    height,width=video.get_size()  # number of events in the file
+    header.loc[-1]=[width,height,0,0]
+    header.index=header.index+1
+    header=header.sort_index()
 
-    header = pd.read_csv(path_to_events, delim_whitespace=True, header=None, names=['width', 'height'],
-                         dtype={'width': np.int, 'height': np.int},
-                         nrows=1)
-    width, height = header.values[0]
+    path_to_events=path_to_events[:-3]+'txt'
+    np.savetxt(path_to_events,header.values,fmt='%d')
+    # events = video.load_n_events(video.event_count())
+    # temp= pd.DataFrame(data=events)
+    # temp=temp.astype({'t':np.float64,'x':np.int16,'y':np.int16,'p':np.int16})
+    # temp=temp.rename(columns=({'p':'pol'}))
+    # txtFile=path_to_events[:-3]+'.txt'
+    # np.savetxt(path_to_events,df.values,fmt='%d')
+
+    # header = pd.read_csv(path_to_events, delim_whitespace=True, header=None, names=['width', 'height'],
+    #                      dtype={'width': np.int, 'height': np.int},
+    #                      nrows=1)
+
+
+    #width, height = header.values[0]
+    height,width= video.get_size()
     print('Sensor size: {} x {}'.format(width, height))
 
     # Load model
