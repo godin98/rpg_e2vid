@@ -35,6 +35,7 @@ Dependencies:
 - [NumPy](https://www.numpy.org/)
 - [Pandas](https://pandas.pydata.org/)
 - [OpenCV](https://opencv.org/)
+- [PropheseeToolbox](https://github.com/prophesee-ai/prophesee-automotive-dataset-toolbox)
 
 ### Install with Anaconda
 
